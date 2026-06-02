@@ -27,7 +27,7 @@ services:
       caddy_2.reverse_proxy: "{{upstreams 80}}"
 
   discordmcp:
-    image: ghcr.io/yundera/discord-mcp:1.0.0
+    image: ghcr.io/bookjjun-ij/discordmcp:latest
     container_name: discordmcp
     hostname: discordmcp
     user: $PUID:$PGID
