@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discord MCP</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+    .container { max-width: 640px; margin: 0 auto; padding: 40px 20px; }
+    h1 { font-size: 24px; margin-bottom: 8px; color: #7289da; }
+    .subtitle { color: #888; margin-bottom: 32px; font-size: 14px; }
+    .card { background: #16213e; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid #1a2744; }
+    .card h2 { font-size: 16px; margin-bottom: 16px; color: #7289da; }
+    .status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.green { background: #43b581; }
+    .dot.red { background: #f04747; }
+    .dot.yellow { background: #faa61a; }
+    label { display: block; font-size: 13px; color: #999; margin-bottom: 4px; margin-top: 12px; }
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 10px 12px; background: #0f1629; border: 1px solid #2a3a5c;
+      border-radius: 8px; color: #e0e0e0; font-size: 14px; outline: none;
+    }
+    input:focus { border-color: #7289da; }
+    .btn {
+      display: inline-block; padding: 10px 20px; background: #7289da; color: white;
+      border: none; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 16px;
+    }
+    .btn:hover { background: #5b6eae; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .msg { margin-top: 12px; font-size: 13px; padding: 8px 12px; border-radius: 6px; }
+    .msg.ok { background: #1a3a2a; color: #43b581; }
+    .msg.err { background: #3a1a1a; color: #f04747; }
+    .info-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px solid #1a2744; }
+    .info-row:last-child { border-bottom: none; }
+    .info-label { color: #888; }
+    .info-value { color: #e0e0e0; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Discord MCP</h1>
+    <p class="subtitle">Discord bot bridge for MCP — discovered by Beacon automatically</p>
+
+    <div class="card">
+      <h2>Status</h2>
+      <div class="status">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">Checking...</span>
+      </div>
+      <div id="statusDetails"></div>
+    </div>
+
+    <div class="card">
+      <h2>Configuration</h2>
+      <label for="botToken">Bot Token</label>
+      <input type="password" id="botToken" placeholder="Enter Discord bot token">
+
+      <label for="defaultGuildId">Default Guild (Server) ID <span style="color:#666">(optional)</span></label>
+      <input type="text" id="defaultGuildId" placeholder="e.g. 123456789012345678">
+
+      <label for="defaultChannelId">Default Channel ID <span style="color:#666">(optional)</span></label>
+      <input type="text" id="defaultChannelId" placeholder="e.g. 123456789012345678">
+
+      <button class="btn" id="saveBtn" onclick="saveConfig()">Save & Restart</button>
+      <div id="saveMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>MCP Endpoint</h2>
+      <div class="info-row">
+        <span class="info-label">Local (Docker)</span>
+        <span class="info-value">http://discordmcp:9640/mcp</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Tools</span>
+        <span class="info-value">send_message, send_embed, list_channels, echo</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadStatus() {
+      try {
+        const r = await fetch('/api/status');
+        const d = await r.json();
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        const details = document.getElementById('statusDetails');
+
+        if (d.setupMode) {
+          dot.className = 'dot yellow';
+          text.textContent = 'Setup Mode — configure bot token below';
+        } else if (d.botConnected) {
+          dot.className = 'dot green';
+          text.textContent = 'Connected as ' + d.botTag;
+        } else {
+          dot.className = 'dot red';
+          text.textContent = 'Disconnected';
+        }
+
+        details.innerHTML = '';
+        if (d.guildCount !== undefined) {
+          details.innerHTML += '<div class="info-row"><span class="info-label">Guilds</span><span class="info-value">' + d.guildCount + '</span></div>';
+        }
+        if (d.defaultChannelId) {
+          details.innerHTML += '<div class="info-row"><span class="info-label">Default Channel</span><span class="info-value">' + d.defaultChannelId + '</span></div>';
+        }
+      } catch (e) {
+        document.getElementById('statusDot').className = 'dot red';
+        document.getElementById('statusText').textContent = 'Error loading status';
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const r = await fetch('/api/config');
+        const d = await r.json();
+        document.getElementById('botToken').value = d.botToken || '';
+        document.getElementById('defaultGuildId').value = d.defaultGuildId || '';
+        document.getElementById('defaultChannelId').value = d.defaultChannelId || '';
+      } catch (e) {}
+    }
+
+    async function saveConfig() {
+      const btn = document.getElementById('saveBtn');
+      const msg = document.getElementById('saveMsg');
+      btn.disabled = true;
+
+      try {
+        const r = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            botToken: document.getElementById('botToken').value,
+            defaultGuildId: document.getElementById('defaultGuildId').value,
+            defaultChannelId: document.getElementById('defaultChannelId').value,
+          }),
+        });
+        const d = await r.json();
+        msg.className = 'msg ' + (d.ok ? 'ok' : 'err');
+        msg.textContent = d.message;
+        setTimeout(loadStatus, 2000);
+      } catch (e) {
+        msg.className = 'msg err';
+        msg.textContent = 'Failed to save: ' + e.message;
+      }
+
+      btn.disabled = false;
+    }
+
+    loadStatus();
+    loadConfig();
+    setInterval(loadStatus, 10000);
+  </script>
+</body>
+</html>
